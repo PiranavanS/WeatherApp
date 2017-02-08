@@ -1,18 +1,21 @@
 package Model;
 
 /**
- * Created by piranavan on 2017-01-18.
+ * Created by piranavan on 2017-02-08.
  */
 
 public class Clouds {
-    public int getPrecipitation() {
-        return precipitation;
+    private int all;
+
+    public Clouds(int all) {
+        this.all = all;
     }
 
-    public void setPrecipitation(int precipitation) {
-        this.precipitation = precipitation;
+    public int getAll() {
+        return all;
     }
 
-    private int precipitation;
-
+    public void setAll(int all) {
+        this.all = all;
+    }
 }

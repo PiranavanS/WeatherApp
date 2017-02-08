@@ -1,26 +1,31 @@
 package Model;
 
 /**
- * Created by piranavan on 2017-01-18.
+ * Created by piranavan on 2017-02-08.
  */
 
 public class Wind {
-    private float speed;
-    private float deg;
+    private double speed;
+    private double deg;
 
-    public float getSpeed() {
+    public Wind(double speed, double deg) {
+        this.speed = speed;
+        this.deg = deg;
+    }
+
+    public double getSpeed() {
         return speed;
     }
 
-    public void setSpeed(float speed) {
+    public void setSpeed(double speed) {
         this.speed = speed;
     }
 
-    public float getDeg() {
+    public double getDeg() {
         return deg;
     }
 
-    public void setDeg(float deg) {
+    public void setDeg(double deg) {
         this.deg = deg;
     }
 }

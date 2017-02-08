@@ -1,37 +1,38 @@
 package com.satkunanathan.piranavan.weatherapp;
 
-import android.content.DialogInterface;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.Manifest;
+import android.app.ProgressDialog;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.location.Criteria;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
-import android.support.v7.app.AlertDialog;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.text.InputType;
-import android.text.format.DateFormat;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.text.DecimalFormat;
-import java.util.Date;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import com.squareup.picasso.Picasso;
 
-import Data.CityPreference;
-import Data.JSONWeatherParser;
-import Data.WeatherHttpClient;
-import Model.Weather;
-import Util.Utils;
+import java.lang.reflect.Type;
 
-public class MainActivity extends AppCompatActivity {
+import Data.HttpClientConnection;
+import Model.OpenWeatherMap;
+import Util.Utility;
+
+public class MainActivity extends AppCompatActivity implements LocationListener {
 
     private TextView cityName;
     private TextView temp;
@@ -44,8 +45,15 @@ public class MainActivity extends AppCompatActivity {
     private TextView sunset;
     private TextView updated;
 
-    Weather weather = new Weather();
+    LocationManager locationManager;
+    String provider;
+    static double lat, lon;
+    static int cityId;
 
+    OpenWeatherMap openWeatherMap = new OpenWeatherMap();
+
+    //runtime permission;
+    int MY_PERMISSION = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +72,8 @@ public class MainActivity extends AppCompatActivity {
                         .setAction("Action", null).show();
             }
         });
+
+        //Control
         cityName = (TextView) findViewById(R.id.cityText);
         iconView = (ImageView) findViewById(R.id.thumbnailIcon);
         temp = (TextView) findViewById(R.id.tempText);
@@ -75,17 +85,29 @@ public class MainActivity extends AppCompatActivity {
         sunset = (TextView) findViewById(R.id.setText);
         updated = (TextView) findViewById(R.id.updateText);
 
-        CityPreference cityPreference = new CityPreference(MainActivity.this);
-        renderWeatherData(cityPreference.getCity());
+        //get coordinates
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        provider = locationManager.getBestProvider(new Criteria(), false);
 
-    }
-
-    public void renderWeatherData(String city){
-        WeatherTask weatherTask = new WeatherTask();
-        if (city == null || city.equals("")){
-            city = "Toronto,CA";
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(MainActivity.this, new String[]{
+                    Manifest.permission.INTERNET,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_NETWORK_STATE,
+                    Manifest.permission.SYSTEM_ALERT_WINDOW,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }, MY_PERMISSION);
         }
-        weatherTask.execute(new String[]{city + "&units=metric"});
+
+        if (provider != null){
+            Location location = locationManager.getLastKnownLocation(provider);
+
+            if (location == null) {
+                Log.e("TAG", "No location");
+            }
+        }
+
     }
 
     @Override
@@ -104,13 +126,115 @@ public class MainActivity extends AppCompatActivity {
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.change_city) {
-            showInputDialog();
+            // showInputDialog();
         }
 
         return super.onOptionsItemSelected(item);
     }
 
-    private void showInputDialog(){
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(MainActivity.this, new String[]{
+                    Manifest.permission.INTERNET,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_NETWORK_STATE,
+                    Manifest.permission.SYSTEM_ALERT_WINDOW,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }, MY_PERMISSION);
+        }
+        locationManager.removeUpdates(this);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(MainActivity.this, new String[]{
+                    Manifest.permission.INTERNET,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_NETWORK_STATE,
+                    Manifest.permission.SYSTEM_ALERT_WINDOW,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }, MY_PERMISSION);
+        }
+        locationManager.requestLocationUpdates(provider, 400, 1, this);
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        lat = location.getLatitude();
+        lon = location.getLongitude();
+
+        new GetWeather().execute(Utility.apiRequest(String.valueOf(lat),String.valueOf(lon)));
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+
+    }
+
+    private class GetWeather extends AsyncTask<String,Void,String>{
+        ProgressDialog pd = new ProgressDialog(MainActivity.this);
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            pd.setTitle("Please wait....");
+            pd.show();
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            super.onPostExecute(s);
+            if(s.contains("Error: Not found city")){
+                pd.dismiss();
+                return;
+            }
+            Gson gson = new Gson();
+            Type mType = new TypeToken<OpenWeatherMap>(){}.getType();
+            openWeatherMap = gson.fromJson(s,mType);
+            pd.dismiss();
+
+            cityName.setText(String.format("%s,%s",openWeatherMap.getName(),openWeatherMap.getSys().getCountry()));
+            updated.setText(String.format("Last Updated: %s", Utility.getDateNow()));
+            description.setText(String.format("%s",openWeatherMap.getWeather().get(0).getDescription()));
+            humididty.setText(String.format("%d%%",openWeatherMap.getMain().getHumidity()));
+            sunrise.setText(String.format("%s",Utility.unixTimeStampToDateTime(openWeatherMap.getSys().getSunrise())));
+            sunset.setText(String.format("%s",Utility.unixTimeStampToDateTime(openWeatherMap.getSys().getSunset())));
+            temp.setText(String.format("%.2f °C",openWeatherMap.getMain().getTemp()));
+            pressure.setText(String.format("%.2f",openWeatherMap.getMain().getPressure()));
+            wind.setText(String.format("%.2f",openWeatherMap.getWind().getDeg()));
+            Picasso.with(MainActivity.this)
+                    .load(Utility.getImage(openWeatherMap.getWeather().get(0).getIcon()))
+                    .into(iconView);
+
+        }
+
+        @Override
+        protected String doInBackground(String... params) {
+            String stream = null;
+            String urlString = params[0];
+            HttpClientConnection httpClientConnection = new HttpClientConnection();
+            stream = httpClientConnection.getHttpData(urlString);
+            return stream;
+        }
+    }
+
+/*    private void showInputDialog(){
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setTitle("Change City");
         final EditText cityInput = new EditText(MainActivity.this);
@@ -127,79 +251,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         builder.show();
-    }
-    private class WeatherTask extends AsyncTask<String, Void, Weather>{
-        @Override
-        protected Weather doInBackground(String... params) {
-            String data = ((new WeatherHttpClient()).getWeatherData(params[0]));
-
-            weather = JSONWeatherParser.getWeather(data);
-
-            return weather;
-        }
-
-        @Override
-        protected void onPostExecute(Weather weather) {
-
-            super.onPostExecute(weather);
-
-            String sunriseString = (String) DateFormat.format("hh:mm:ss a", new Date(weather.place.getSunrise()));
-            String sunsetString = (String) DateFormat.format("hh:mm:ss a", new Date(weather.place.getSunset()));
-            String updateString = (String) DateFormat.format("hh:mm:ss a", new Date(weather.place.getLastupdate()));
-
-            if(sunriseString == null || sunsetString == null || updateString == null){
-                sunriseString = "";
-                sunsetString = "";
-                updateString = "";
-            }
-
-            DecimalFormat decimalFormat = new DecimalFormat("#.#");
-            String tempFormat = decimalFormat.format(weather.currentCondition.getTemperature());
-
-            cityName.setText(weather.place.getCity() + "," + weather.place.getCountry());
-            temp.setText("" + tempFormat + "\u00b0" + "C");
-            humididty.setText("Humidity: " + weather.currentCondition.getHumidity() + "%");
-            pressure.setText(("Pressure: " + weather.currentCondition.getPressure() + " hPa"));
-            wind.setText("Wind: " + weather.wind.getSpeed() + " mps");
-            sunrise.setText("Sunrise: " + sunriseString);;
-            sunset.setText("Sunset: "+ sunsetString);
-            updated.setText("Last Updated: " + updateString);
-            description.setText("Condition: " + weather.currentCondition.getCondition() + " ("
-            + weather.currentCondition.getDescription() + ")");
-            new DownloadImageTask().execute(weather.currentCondition.getIcon());
-
-        }
-
-    }
-
-    private class DownloadImageTask extends AsyncTask<String, Void, Bitmap>{
-        @Override
-        protected void onPostExecute(Bitmap bitmap) {
-            iconView.setImageBitmap(bitmap);
-        }
-
-        @Override
-        protected Bitmap doInBackground(String... params) {
-            return downloadImage(params[0]);
-        }
-
-
-        private Bitmap downloadImage(String code){
-            try {
-                java.net.URL url = new java.net.URL(Utils.ICON_URL +code + ".png");
-                HttpURLConnection connection = (HttpURLConnection) url
-                        .openConnection();
-                connection.setDoInput(true);
-                connection.connect();
-                InputStream input = connection.getInputStream();
-                Bitmap myBitmap = BitmapFactory.decodeStream(input);
-                return myBitmap;
-            } catch (IOException e) {
-                e.printStackTrace();
-                return null;
-            }
-
-        }
-    }
+    }*/
 
 }
